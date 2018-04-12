@@ -385,14 +385,26 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
 
     private void delete(FileItem item) {
         if(item != null) {
-            File file = new File(item.path);
+            final File file = new File(item.path);
             if(file.exists()) {
-                if(file.delete()) {
-                    Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
-                    getFileData(mCurrentPath);
-                } else {
-                    Toast.makeText(MainActivity.this, "删除失败", Toast.LENGTH_SHORT).show();
-                }
+                new AlertDialog.Builder(this)
+                        .setTitle("提示")
+                        .setMessage("确定删除吗？")
+                        .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                if(file.delete()) {
+                                    Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
+                                    getFileData(mCurrentPath);
+                                } else {
+                                    Toast.makeText(MainActivity.this, "删除失败", Toast.LENGTH_SHORT).show();
+                                }
+                            }
+                        })
+                        .setNegativeButton("取消", null)
+                        .create()
+                        .show();
+
             } else {
                 Toast.makeText(MainActivity.this, "文件名不存在", Toast.LENGTH_SHORT).show();
             }
