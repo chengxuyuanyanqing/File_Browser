@@ -457,7 +457,7 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
     }
 
     public static final String[] WRITE_READ_EXTERNAL_PERMISSION = {
@@ -476,7 +476,6 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
 
     @Override
     public void onPermissionsDenied(int requestCode, @NonNull List<String> perms) {
-
     }
 
     @Override
