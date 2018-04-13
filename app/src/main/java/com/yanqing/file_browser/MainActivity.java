@@ -123,7 +123,7 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
                         break;
                     }
                     case FileItem.FILE_TYPE_MUSIC: {
-                        showFile(item.path, "music/*");
+                        showFile(item.path, "audio/*");
                         break;
                     }
                     case FileItem.FILE_TYPE_TEXT: {
