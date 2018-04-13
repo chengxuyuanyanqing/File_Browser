@@ -9,4 +9,8 @@
         android:id="@+id/rename"
         android:title="重命名"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/edit"
+        android:title="多选操作"
+        app:showAsAction="always" />
 </menu>

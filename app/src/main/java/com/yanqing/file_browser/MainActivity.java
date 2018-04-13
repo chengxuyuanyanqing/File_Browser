@@ -3,19 +3,19 @@ package com.yanqing.file_browser;
 import android.Manifest;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.StrictMode;
 import android.support.annotation.NonNull;
-import android.support.v4.content.FileProvider;
 import android.support.v7.app.AlertDialog;
 import android.os.Bundle;
 import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
-import android.util.Log;
+import android.util.SparseBooleanArray;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -23,7 +23,10 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -48,11 +51,18 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
     private FileAdapter mAdapter;
     private LinearLayoutManager mLayoutManager;
     private TextView mPathView;
+    private LinearLayout mEditFunctionLayout;
+    private TextView mEditSelectedAllView;
+    private TextView mEditDeleteView;
+    private TextView mEditCancelView;
 
     private String mDefaultPath;
     private String mCurrentPath;
 
     private int mSelectedPosition;
+
+    private Animation mEditAnimationIn;
+    private Animation mEditAnimationOut;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +73,17 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
         }
         setContentView(R.layout.activity_main);
         setTitle(R.string.app_name);
+
+        mEditFunctionLayout = findViewById(R.id.edit_function);
+        mEditSelectedAllView = findViewById(R.id.edit_selected_all);
+        mEditDeleteView = findViewById(R.id.edit_delete);
+        mEditCancelView = findViewById(R.id.edit_cancel);
+        mEditSelectedAllView.setOnClickListener(mEditSelectedAllClickListener);
+        mEditDeleteView.setOnClickListener(mEditDeleteClickListener);
+        mEditCancelView.setOnClickListener(mEditCancelClickListener);
+
         mPathView = findViewById(R.id.current_path);
+
         mRecyclerView = findViewById(R.id.recycler_list);
         mLayoutManager = new LinearLayoutManager(this);
         mRecyclerView.setLayoutManager(mLayoutManager);
@@ -105,6 +125,86 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
             }).execute(path);
         }
     }
+
+    private void showEditModel() {
+        mAdapter.setEditModel(true);
+        mPathView.setText("已选中 0 项");
+        if(mEditAnimationIn == null) {
+            mEditAnimationIn = AnimationUtils.loadAnimation(this, R.anim.bottom_in);
+        }
+        mEditFunctionLayout.clearAnimation();
+        mEditFunctionLayout.setVisibility(View.VISIBLE);
+        mEditFunctionLayout.startAnimation(mEditAnimationIn);
+    }
+
+    private void hideEditEditModel() {
+        mAdapter.setEditModel(false);
+        mPathView.setText(mCurrentPath);
+        if(mEditAnimationOut == null) {
+            mEditAnimationOut = AnimationUtils.loadAnimation(this, R.anim.bottom_out);
+            mEditAnimationOut.setAnimationListener(mAnimationOutListener);
+        }
+        mEditFunctionLayout.clearAnimation();
+        mEditFunctionLayout.startAnimation(mEditAnimationOut);
+    }
+
+    private void updateDeleteButtonState(int selectedCount) {
+        mPathView.setText("已选中 " + selectedCount + " 项");
+        if(selectedCount > 0) {
+            mEditDeleteView.setTextColor(Color.BLACK);
+            mEditDeleteView.setClickable(true);
+        } else {
+            mEditDeleteView.setTextColor(Color.GRAY);
+            mEditDeleteView.setClickable(false);
+        }
+    }
+
+    private Animation.AnimationListener mAnimationOutListener = new Animation.AnimationListener() {
+        @Override
+        public void onAnimationStart(Animation animation) {
+
+        }
+
+        @Override
+        public void onAnimationEnd(Animation animation) {
+            mEditFunctionLayout.setVisibility(View.GONE);
+        }
+
+        @Override
+        public void onAnimationRepeat(Animation animation) {
+
+        }
+    };
+
+    private View.OnClickListener mEditSelectedAllClickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            if(v.isSelected()) {
+                mAdapter.setAllSelected(false);
+                v.setSelected(false);
+                ((TextView)v).setText("全选");
+            } else {
+                mAdapter.setAllSelected(true);
+                v.setSelected(true);
+                ((TextView)v).setText("取消全选");
+            }
+        }
+    };
+
+    private View.OnClickListener mEditDeleteClickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            ArrayList<FileItem> fileItems = mAdapter.getSelectedItems();
+            delete(fileItems.toArray(new FileItem[fileItems.size()]));
+        }
+    };
+
+    private View.OnClickListener mEditCancelClickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            hideEditEditModel();
+        }
+    };
 
     private View.OnClickListener mItemClickListener = new View.OnClickListener() {
         @Override
@@ -160,6 +260,14 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
         }
     };
 
+    private View.OnClickListener mEditModelClickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            int position = (int)v.getTag();
+            mAdapter.setReverseSelected(position);
+        }
+    };
+
     private class FileAdapter extends RecyclerView.Adapter<AbsViewHolder> {
         private final static int STATUS_NONE = 0;
         private final static int STATUS_LOADING = 1;
@@ -167,6 +275,13 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
 
         private int mStatus;
         private ArrayList<FileItem> mFileItems;
+
+        private SparseBooleanArray mBooleanArray;
+        private boolean mIsEditModel = false;
+
+        public FileAdapter() {
+            mBooleanArray = new SparseBooleanArray();
+        }
 
         public void setFileItems(ArrayList<FileItem> fileItems) {
             mFileItems = fileItems;
@@ -182,6 +297,61 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
             mFileItems = null;
             mStatus = status;
             notifyDataSetChanged();
+        }
+
+        public void setEditModel(boolean editModel) {
+            mIsEditModel = editModel;
+            mBooleanArray.clear();
+            notifyDataSetChanged();
+            if(editModel) {
+                updateDeleteButtonState(getSelectedCount());
+            }
+        }
+
+        private boolean getSelected(int position) {
+            return mBooleanArray.get(position, false);
+        }
+
+        private void setSelected(int position, boolean selected) {
+            mBooleanArray.put(position, selected);
+            notifyDataSetChanged();
+            updateDeleteButtonState(getSelectedCount());
+        }
+
+        private int getSelectedCount() {
+            int count = 0;
+            if(mFileItems != null) {
+                for(int i = 0; i < mFileItems.size(); i++) {
+                    if(getSelected(i)) {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        public void setReverseSelected(int position) {
+            setSelected(position, !getSelected(position));
+        }
+
+        public void setAllSelected(boolean isSelected) {
+            if(mFileItems != null) {
+                for(int i = 0; i < mFileItems.size(); i++) {
+                    setSelected(i, isSelected);
+                }
+            }
+        }
+
+        public ArrayList<FileItem> getSelectedItems() {
+            ArrayList<FileItem> result = new ArrayList<>();
+            if(mFileItems != null) {
+                for(int i = 0; i < mFileItems.size(); i++) {
+                    if(getSelected(i)) {
+                        result.add(mFileItems.get(i));
+                    }
+                }
+            }
+            return result;
         }
 
         @Override
@@ -241,14 +411,22 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
                     }
                     viewHolder.mNameView.setText(item.name);
                     if(item.type != FileItem.FILE_TYPE_DIRECTORY) {
-                        viewHolder.mChlidCountView.setText(Utils.changeFileSizeToString(MainActivity.this, item.fileSize));
+                        viewHolder.mChildCountView.setText(Utils.changeFileSizeToString(MainActivity.this, item.fileSize));
                     } else {
-                        viewHolder.mChlidCountView.setText(item.childCount + "项");
+                        viewHolder.mChildCountView.setText(item.childCount + "项");
                     }
                     viewHolder.mModifyTimeView.setText(Utils.changeTimeToString(item.lastModifyTime));
-                    viewHolder.itemView.setTag(item);
-                    viewHolder.itemView.setOnClickListener(mItemClickListener);
-                    viewHolder.itemView.setOnCreateContextMenuListener(mContextMenuListener);
+                    if(mIsEditModel) {
+                        viewHolder.mCheckBox.setVisibility(View.VISIBLE);
+                        viewHolder.mCheckBox.setChecked(getSelected(position));
+                        viewHolder.itemView.setTag(position);
+                        viewHolder.itemView.setOnClickListener(mEditModelClickListener);
+                    } else {
+                        viewHolder.mCheckBox.setVisibility(View.GONE);
+                        viewHolder.itemView.setTag(item);
+                        viewHolder.itemView.setOnClickListener(mItemClickListener);
+                        viewHolder.itemView.setOnCreateContextMenuListener(mContextMenuListener);
+                    }
                     break;
                 }
             }
@@ -309,6 +487,10 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if(keyCode == KeyEvent.KEYCODE_BACK) {
+            if(mEditFunctionLayout.getVisibility() == View.VISIBLE) {
+                hideEditEditModel();
+                return true;
+            }
             if(!mCurrentPath.equals(mDefaultPath)) {
                 File file = new File(mCurrentPath);
                 if(file.exists()) {
@@ -347,6 +529,8 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
             delete(mAdapter.getFileItem(mCurMenuItemIndex));
         } else if(item.getItemId() == R.id.rename) {
             rename(mAdapter.getFileItem(mCurMenuItemIndex));
+        } else if(item.getItemId() == R.id.edit) {
+            showEditModel();
         }
         return super.onContextItemSelected(item);
     }
@@ -383,33 +567,75 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
         builder.create().show();
     }
 
-    private void delete(FileItem item) {
-        if(item != null) {
-            final File file = new File(item.path);
-            if(file.exists()) {
-                new AlertDialog.Builder(this)
-                        .setTitle("提示")
-                        .setMessage("确定删除吗？")
-                        .setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                if(file.delete()) {
-                                    Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
-                                    getFileData(mCurrentPath);
-                                } else {
-                                    Toast.makeText(MainActivity.this, "删除失败", Toast.LENGTH_SHORT).show();
+    private void delete(final FileItem... item) {
+        if(item != null && item.length > 0) {
+            new AlertDialog.Builder(this)
+                    .setTitle("提示")
+                    .setMessage(getDeleteHint(item))
+                    .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            mAdapter.setEditModel(false);
+                            mAdapter.setStatus(FileAdapter.STATUS_LOADING);
+                            hideEditEditModel();
+                            for(FileItem fileItem : item) {
+                                File file = new File(fileItem.path);
+                                if(file.exists() && !deleteFile(file)) {
+                                    Toast.makeText(MainActivity.this, "删除" + fileItem.name + "失败", Toast.LENGTH_SHORT).show();
                                 }
                             }
-                        })
-                        .setNegativeButton("取消", null)
-                        .create()
-                        .show();
+                            Toast.makeText(MainActivity.this, "删除完成", Toast.LENGTH_SHORT).show();
+                            getFileData(mCurrentPath);
+                        }
+                    })
+                    .setNegativeButton("取消", null)
+                    .create()
+                    .show();
+        }
+    }
 
-            } else {
-                Toast.makeText(MainActivity.this, "文件名不存在", Toast.LENGTH_SHORT).show();
-            }
+    //递归删除文件
+    private boolean deleteFile(File file) {
+        if(file.isFile()) {
+            return file.delete();
         } else {
-            Toast.makeText(MainActivity.this, "文件名不存在", Toast.LENGTH_SHORT).show();
+            File[] files = file.listFiles();
+            if(files != null && files.length > 0) {
+                for(File file1 : files) {
+                    if(!deleteFile(file1)) {
+                        return false;
+                    }
+                }
+            }
+            return file.delete();
+        }
+    }
+
+    private String getDeleteHint(FileItem... fileItems) {
+        boolean hasFile = false;
+        boolean hasFolder = false;
+        if(fileItems.length == 1) {
+            File file = new File(fileItems[0].path);
+            if(file.isFile()) {
+                return "确定删除选中的文件吗?";
+            }
+            return "确定删除选中的文件夹吗?";
+        } else {
+            for(FileItem item : fileItems) {
+                File file = new File(item.path);
+                if(file.isFile()) {
+                    hasFile = true;
+                } else {
+                    hasFolder = true;
+                }
+            }
+            if(hasFile && hasFolder) {
+                return "确定删除选中的所有文件和文件夹吗?";
+            } else if(hasFile) {
+                return "确定删除选中的所有文件吗?";
+            } else {
+                return "确定删除选中的所有文件夹吗?";
+            }
         }
     }
 
@@ -446,8 +672,6 @@ public class MainActivity extends ToolbarActivity implements EasyPermissions.Per
             } else {
                 Toast.makeText(MainActivity.this, "文件名不存在", Toast.LENGTH_SHORT).show();
             }
-        } else {
-            Toast.makeText(MainActivity.this, "文件名不存在", Toast.LENGTH_SHORT).show();
         }
     }
 }
